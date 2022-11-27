@@ -1,5 +1,4 @@
 # cython: language_level=3
-# cython: linetrace=True
 
 '''
 Author: Eric P. Nichols
@@ -25,6 +24,7 @@ from enum import Enum
 
 import cython
 import numpy as np
+cimport numpy as np
 
 P_EMPTY = 0
 P_WHITE = 1
@@ -80,13 +80,13 @@ class Board():
 
         self.n = 9
 
-        self.board = np.ones((9, 9)) * T_NORMAL
+        self.board = np.ones((9, 9), dtype=np.int8) * T_NORMAL
         self.board[tuple(np.array(CASTLE_POSITIONS).T)] = T_CASTLE
         self.board[tuple(np.array(SAFETY_POSITIONS).T)] = T_SAFETY
         self.board[tuple(np.array(CAMP_POSITIONS).T)] = T_CAMP
 
         if pieces is None:
-            self.pieces = np.ones((9, 9)) * P_EMPTY
+            self.pieces = np.ones((9, 9), dtype=np.int8) * P_EMPTY
             self.pieces[tuple(np.array(WHITE_POSITIONS).T)] = P_WHITE
             self.pieces[tuple(np.array(KING_POSITIONS).T)] = P_KING
             self.pieces[tuple(np.array(BLACK_POSITIONS).T)] = P_BLACK
@@ -112,8 +112,10 @@ class Board():
                 if self[x][y]==-color:
                     count -= 1
         return count
-
-    def get_legal_moves_old(self, color):
+    
+    @cython.boundscheck(False) 
+    @cython.wraparound(False)
+    def get_legal_moves_old(self, color : int):
         moves = []
         blocked_by_camps = True
         for horizontal in [True, False]:
@@ -150,7 +152,7 @@ class Board():
         # Get all the squares with pieces of the given color.
         for y in range(self.n):
             for x in range(self.n):
-                if self.pieces[y][x]==color:
+                if self.get_allegiance(self.pieces[y][x])==color:
                     newmoves = self.get_moves_for_square((y,x))
                     moves.extend([((y, x), (to_y, to_x)) for to_y, to_x in newmoves])
         # moves = list(moves)
@@ -158,25 +160,10 @@ class Board():
 
     @cython.boundscheck(False) 
     @cython.wraparound(False)
-    def get_legal_moves(self, color : int):
-        """Returns all the legal moves for the given color.
-        (1 for white, -1 for black
-        """
-        moves = []  # stores the legal moves.
-
-        # Get all the squares with pieces of the given color.
-        for y in range(self.n):
-            for x in range(self.n):
-                if self.pieces[y][x]==color:
-                    newmoves = self.get_moves_for_square((y,x))
-                    moves.extend([((y, x), (to_y, to_x)) for to_y, to_x in newmoves])
-        # moves = list(moves)
-        return moves
-
     def has_legal_moves(self, color : int):
         for y in range(self.n):
             for x in range(self.n):
-                if self.pieces[y][x]==color:
+                if self.get_allegiance(self.pieces[y][x])==color:
                     newmoves = self.get_moves_for_square((x,y))
                     if len(newmoves)>0:
                         return True
@@ -203,7 +190,6 @@ class Board():
     @cython.boundscheck(False) 
     @cython.wraparound(False)
     def rook_moves_black_in_camp(self, square : tuple):
-        standard_tile_blockers = [T_CASTLE]
 
         moves = []
         for dy, dx in self._move_directions:
@@ -212,7 +198,7 @@ class Board():
             x += dx
             left_camp = False
 
-            while self.in_board((y, x)) and self.pieces[y, x] == P_EMPTY and self.board[y, x] not in standard_tile_blockers and \
+            while self.in_board((y, x)) and self.pieces[y, x] == P_EMPTY and self.board[y, x] != T_CASTLE and \
                 (self.board[y, x] != T_CAMP or not left_camp):
                 moves.append((y, x))
                 y += dy
@@ -223,6 +209,8 @@ class Board():
         return moves
 
 
+    @cython.boundscheck(False) 
+    @cython.wraparound(False)
     def get_moves_for_square(self, square):
         tile, piece = self[square]
 
@@ -233,12 +221,10 @@ class Board():
         return self.rook_moves(square)
 
     def get_allegiance(self, piece):
-        if piece in [P_WHITE, P_KING]:
+        if piece == P_KING:
             return P_WHITE
-        elif piece == P_BLACK:
-            return P_BLACK
         else:
-            return P_EMPTY
+            return piece
 
     def is_barrier(self, position, black_in_camp=False):
         # For a black piece in a camp, other pieces

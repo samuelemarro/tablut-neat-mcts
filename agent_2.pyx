@@ -2,12 +2,14 @@
 
 import numpy as np
 cimport numpy as np
+from time import time
 
 from tablut import *
 import heuristics
+import multiprocessing as mp
 
 class Agent:
-    def play(self, initial_board : Board, initial_turn, depth=50, count=100):
+    def play(self, initial_board : Board, initial_turn, depth=50, count=100, parallel=None, timeout=None):
         raise NotImplementedError
 
 class GeneticAgent(Agent):
@@ -74,7 +76,6 @@ class GeneticAgent(Agent):
         moves, move_probability = self.get_moves_and_probs(initial_board, initial_turn, None, 0)
 
         current_scores = np.zeros((len(moves),))
-        run_count = np.zeros((len(moves,)))
 
         actual_depths = np.random.randint(0, depth + 1, count)
         for i in range(count):
@@ -89,15 +90,53 @@ class GeneticAgent(Agent):
             score = self.tree_search(new_board, new_turn, chosen_move, depth=actual_depths[i]) * initial_turn
 
             current_scores[chosen_move_index] += score
-            run_count[chosen_move_index] += 1
         
         return moves[np.argmax(current_scores)]
     
-    def play(self, initial_board : Board, initial_turn, depth=50, count=100):
-        return self.monte_carlo_tree_search(initial_board, initial_turn, depth=depth, count=count)
+    def run_one_instance(self, pool_info):
+        initial_board, initial_turn, max_depth, timeout = pool_info
+        start_time = time()
+        moves, move_probability = self.get_moves_and_probs(initial_board, initial_turn, None, 0)
+        current_scores = np.zeros((len(moves),))
+        while True:
+            actual_depth = np.random.randint(1, max_depth + 1)
+            chosen_move_index = np.random.choice(np.arange(len(moves)), p=move_probability)
+            chosen_move = moves[chosen_move_index]
+
+            new_board = initial_board.copy()
+            new_board.execute_move(*chosen_move)
+            new_turn = -initial_turn
+
+            # If we're black, we flip the score
+            score = self.tree_search(new_board, new_turn, chosen_move, depth=actual_depth) * initial_turn
+            current_scores[chosen_move_index] += score
+
+            print('Timeout check')
+            if time() - start_time >= timeout:
+                break
+
+        return current_scores
+
+    def parallel_monte_carlo_tree_search(self, initial_board, initial_turn, parallel, timeout, max_depth=50):
+        moves = initial_board.get_legal_moves(initial_turn)
+        final_scores = np.zeros((len(moves),))
+        pool_infos = [(initial_board, initial_turn, max_depth, timeout)] * parallel
+        results = mp.Pool(processes=parallel).map(self.run_one_instance, pool_infos)
+        
+        for result in results:
+            final_scores += result
+        
+        final_move_index = np.argmax(final_scores)
+        return moves[final_move_index]
+
+    def play(self, initial_board : Board, initial_turn, depth=50, count=100, parallel=None, timeout=None):
+        if parallel is None:
+            return self.monte_carlo_tree_search(initial_board, initial_turn, depth=depth, count=count)
+        else:
+            return self.parallel_monte_carlo_tree_search(initial_board, initial_turn, parallel, timeout, max_depth=depth)
 
 class RandomAgent(Agent):
-    def play(self, initial_board : Board, initial_turn, depth=50, count=100):
+    def play(self, initial_board : Board, initial_turn, depth=50, count=100, parallel=None, timeout=None):
         moves = initial_board.get_legal_moves(initial_turn)
         index = np.random.choice(np.arange((len(moves))))
         return moves[index]
