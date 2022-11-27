@@ -9,8 +9,17 @@ from agent import *
 import os
 import neat
 import visualize
+import pickle
 
-chosen_population = 143
+chosen_population = 181
+
+# depth_schedule = [6, 6] + ([8] * 100)
+# count_schedule = [40, 80, 125, 250, 500, 1000] + ([1000] * 100)
+max_winners = 1
+depth = 8
+count = 120
+num_battles = 4
+processes = 10
 
 def run(config_file):
     # Load configuration.
@@ -20,17 +29,17 @@ def run(config_file):
 
     # Create the population, which is the top-level object for a NEAT run.
     p = neat.Checkpointer.restore_checkpoint(f'neat-checkpoint-{chosen_population}')
-    print(p.population.keys())
-    winner = sorted([v for v in p.population.values() if v.fitness is not None], key=lambda v: v.fitness)[-1]
+    genomes = list(p.population.values())
+    for genome in genomes:
+        genome.fitness = 0
+    from time import time
+    start_time = time()
+    best = arena.tournament(genomes, config, max_winners, depth, count, num_battles=num_battles, processes=processes)[0]
+    print('Elapsed:', time() - start_time)
 
-    agent = GeneticAgent(neat.nn.FeedForwardNetwork.create(winner, config))
-    opponent = RandomAgent()
-    print(arena.battle(agent, opponent, num_battles=10))
-    
-    # visualize.draw_net(config, winner, True)#, node_names=node_names)
-    #visualize.draw_net(config, winner, True, node_names=node_names, prune_unused=True)
-    #visualize.plot_stats(stats, ylog=False, view=True)
-    #visualize.plot_species(stats, view=True)
+    with open('best_genome', 'wb') as f:
+        pickle.dump(best, f)
+    print('We\'re done!')
 
 
 if __name__ == '__main__':
