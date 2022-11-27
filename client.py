@@ -2,21 +2,12 @@ import numpy as np
 import pyximport; pyximport.install(setup_args={
                               "include_dirs":np.get_include()},)
 
-# import the necessary packages
-import random
-import sys
-import threading
-
-import argparse
 import pickle
-import numpy
 import socket
 import json
 from requests.exceptions import ConnectionError
 
 import numpy as np
-
-from time import sleep
 
 import click
 import neat
@@ -191,24 +182,29 @@ def load_agent(random, genome_path, config):
 @click.argument('color', type=str)
 @click.argument('timeout', type=int)
 @click.argument('ip', type=str)
-@click.option('--genome-path', type=click.Path(exists=True, dir_okay=False), default='best_genome')
-@click.option('--config-path', type=click.Path(exists=True, dir_okay=False), default='config-feedforward')
-@click.option('--random', is_flag=True)
-def main(color : str, timeout : int, ip : str, genome_path, config_path, random):
+@click.option('--genome-path', type=click.Path(exists=True, dir_okay=False), default='best_genome', help='Path to genome file.', show_default=True)
+@click.option('--config-path', type=click.Path(exists=True, dir_okay=False), default='config-feedforward', help='Path to configuration file.', show_default=True)
+@click.option('--random', is_flag=True, help='If used, replaces the player with a random move agent.')
+@click.option('--depth', type=int, help='Monte Carlo Tree Search depth.', default=8, show_default=True)
+@click.option('--parallel', type=int, help='Number of parallel threads.', default=4, show_default=True)
+def main(color : str, timeout : int, ip : str, genome_path, config_path, random, depth, parallel):
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_path)
 
+    original_color = color
     color = color.lower()[0]
 
     if color == 'w':
         color = 1
         player_name = '"Ta-Marro WHITE"'
         PORT = 5800
-    else:
+    elif color == 'b':
         color = -1
         player_name = '"Ta-Marro BLACK"'
         PORT = 5801
+    else:
+        print(f'Unrecognized color "{original_color}". Valid options: WHITE/W, BLACK/B (case-insensitive).')
     
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((ip, PORT))
@@ -248,7 +244,7 @@ def main(color : str, timeout : int, ip : str, genome_path, config_path, random)
             #print('Parsed:', parse_board_info(board_info))
             try:
                 # .925 is our failsafe margin
-                move = agent.play(board, turn, parallel=1, depth=5, timeout=(timeout*.925), previous_move=previous_move, previous_score=previous_score)
+                move = agent.play(board, turn, parallel=parallel, depth=depth, timeout=(timeout*.925), previous_move=previous_move, previous_score=previous_score)
             except:
                 # If for some unknown reason the agent failed, we send back something
                 move = RandomAgent().play(board, turn)
