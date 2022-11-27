@@ -15,16 +15,20 @@ def play_game(agent_black : Agent, agent_white : Agent):
     board = Board()
     turn = 1 # Black begins
     players = [agent_black, None, agent_white]
+    previous_move = None
+    previous_score = 0
 
     # agent_1 always goes first
     for i in range(50):
-        move = players[turn + 1].play(board.copy(), turn, depth=6, count=24)
+        move = players[turn + 1].play(board.copy(), turn, depth=4, count=24, previous_move=previous_move, previous_score=previous_score)
         
         if move is None:
             # Out-of-moves, instant loss
             return -turn
+        previous_score = board.get_score_diff()
         board.execute_move(*move)
         turn = -turn
+        previous_move = move
 
         winner = board.check_winner(check_no_moves=False)
         if winner != 0:
