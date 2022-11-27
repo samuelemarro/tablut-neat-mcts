@@ -147,29 +147,34 @@ def encode_move(move, turn):
     }
 
 def find_previous_move(previous_board, new_board, color):
-    if previous_board is None:
-        return None
-    converted_previous_board = np.zeros((9, 9))# previous_board.copy()
-    converted_new_board = np.zeros((9, 9)) #new_board.copy()
-    for y in range(9):
-        for x in range(9):
-            previous = previous_board.get_allegiance(previous_board.pieces[y, x])
-            new = new_board.get_allegiance(new_board.pieces[y, x])
-            if previous != color and previous != 0:
-                converted_previous_board[y, x] = 1
-            if new != color and new != 0:
-                converted_new_board[y, x] = 1
-    
-    # print('Converted new:', converted_new_board)
-    diff = converted_new_board - converted_previous_board
-    # print('Diff:', diff)
-    start_positions = np.argwhere(diff < 0)
-    # print('Start positions:', start_positions)
-    assert len(start_positions) == 1
-    end_positions = np.argwhere(diff > 0)
-    assert len(end_positions) == 1
+    try:
+        if previous_board is None:
+            return None
+        converted_previous_board = np.zeros((9, 9))# previous_board.copy()
+        converted_new_board = np.zeros((9, 9)) #new_board.copy()
+        for y in range(9):
+            for x in range(9):
+                previous = previous_board.get_allegiance(previous_board.pieces[y, x])
+                new = new_board.get_allegiance(new_board.pieces[y, x])
+                if previous != color and previous != 0:
+                    converted_previous_board[y, x] = 1
+                if new != color and new != 0:
+                    converted_new_board[y, x] = 1
+        
+        # print('Converted new:', converted_new_board)
+        diff = converted_new_board - converted_previous_board
+        # print('Diff:', diff)
+        start_positions = np.argwhere(diff < 0)
+        # print('Start positions:', start_positions)
+        assert len(start_positions) == 1
+        end_positions = np.argwhere(diff > 0)
+        assert len(end_positions) == 1
 
-    return tuple(start_positions[0]), tuple(end_positions[0])
+        return tuple(start_positions[0]), tuple(end_positions[0])
+    except:
+        # Sometimes the server executes the command incorrectly
+        # As a failsafe, we return None
+        return None
 
 def load_agent(random, genome_path, config):
     if random:
@@ -241,7 +246,12 @@ def main(color : str, timeout : int, ip : str, genome_path, config_path, random)
             print('Previous move:', previous_move)
 
             #print('Parsed:', parse_board_info(board_info))
-            move = agent.play(board, turn, parallel=1, depth=5, timeout=timeout, previous_move=previous_move, previous_score=previous_score)
+            try:
+                # .925 is our failsafe margin
+                move = agent.play(board, turn, parallel=1, depth=5, timeout=(timeout*.925), previous_move=previous_move, previous_score=previous_score)
+            except:
+                # If for some unknown reason the agent failed, we send back something
+                move = RandomAgent().play(board, turn)
             print('Playing:', move)
             encoded = encode_move(move, turn)
             #print('Encoded:', encoded)
