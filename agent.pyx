@@ -111,7 +111,7 @@ class GeneticAgent(Agent):
             score = self.tree_search(new_board, new_turn, chosen_move, depth=actual_depth) * initial_turn
             current_scores[chosen_move_index] += score
 
-            print('Timeout check')
+            # print('Timeout check')
             if time() - start_time >= timeout:
                 break
 

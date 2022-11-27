@@ -1,5 +1,5 @@
 cython
 numpy
 scikit-learn
-neat
+neat-python
 click
